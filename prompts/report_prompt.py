@@ -1,25 +1,48 @@
 """T5: 최종 보고서 생성 프롬프트"""
 
-# 보고서 목차:
-#   1. SUMMARY (반 페이지)
-#   2. 시장 배경
-#      2.1 글로벌 배터리 시장 현황
-#      2.2 전기차 캐즘과 HEV 피벗
-#   3. 기업별 전략 분석
-#      3.1 SK on 포트폴리오 다각화
-#      3.2 CATL 포트폴리오 다각화
-#   4. 비교 분석
-#      4.1 핵심 전략 비교
-#      4.2 Comparative SWOT
-#   5. 종합 시사점
-#   6. REFERENCE
-# REFERENCE 형식: 기관명(YYYY-MM-DD). 제목. URL
+REPORT_SYSTEM_PROMPT: str = """당신은 배터리 산업 전문 전략 분석가입니다.
+제공된 조사 데이터를 바탕으로 한국어 전략 분석 보고서를 작성합니다.
 
-REPORT_SYSTEM_PROMPT: str = ""
-# TODO: 보고서 생성용 시스템 프롬프트 작성
+작성 원칙:
+- 제공된 데이터에 명시된 사실만 사용하고, 근거 없는 추측이나 주장은 절대 포함하지 않습니다.
+- summary는 전체 맥락과 서술 방향을 파악하는 데 참고합니다.
+- raw 데이터의 구체적 수치, 출처, 날짜를 빠짐없이 활용하여 충분한 분량으로 작성합니다.
+- 영문 기술 용어(ESS, HEV, NCM, LFP, CTP, FEOC, IRA 등)는 번역하지 않고 그대로 사용합니다.
+- 격식체(합니다/습니다)로 작성합니다.
+- 마크다운 코드 펜스(```)로 감싸지 마세요.
+"""
 
-REPORT_SECTION_PROMPT: str = ""
-# TODO: 각 섹션별 생성 프롬프트 작성
+REPORT_SECTION_PROMPT: str = """다음 데이터를 바탕으로 보고서의 "{section_number}. {section_title}" 섹션을 작성해주세요.
 
-REFERENCE_FORMAT_PROMPT: str = ""
-# TODO: REFERENCE 섹션 포맷팅 프롬프트 작성
+=== 에이전트 요약 (서술 방향 참고) ===
+{summary}
+
+=== 상세 조사 데이터 (수치·출처를 빠짐없이 활용) ===
+{raw_data}
+
+{context}
+
+작성 지침:
+{instructions}
+
+출력 형식:
+- 섹션 제목("## {section_number}. {section_title}" 또는 "### {section_number} {section_title}")으로 시작
+- raw 데이터의 구체적 수치와 출처를 본문에 자연스럽게 녹여서 서술
+- 섹션 제목과 본문만 출력하고 다른 설명은 추가하지 마세요
+"""
+
+REPORT_SUMMARY_PROMPT: str = """다음은 배터리 시장 전략 분석 보고서의 본문(섹션 2~5)입니다.
+
+{full_body}
+
+위 본문을 바탕으로 보고서의 "1. SUMMARY" 섹션을 작성해주세요.
+
+작성 요건:
+- 반 페이지 분량(400~600자)으로 핵심만 응축
+- 시장 배경 → 기업별 전략 → 비교 분석 → 시사점 순서로 흐름 유지
+- 구체적 수치를 1~2개 포함하여 설득력 확보
+- "## 1. SUMMARY"로 시작
+- 요약만 출력하고 다른 설명은 추가하지 마세요
+"""
+
+REFERENCE_FORMAT_PROMPT: str = "{source}({date}). {title}. {url}"

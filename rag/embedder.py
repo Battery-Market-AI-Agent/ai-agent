@@ -8,6 +8,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 
 def get_embeddings() -> HuggingFaceEmbeddings:
-    """BGE-M3 임베딩 모델을 로드하여 반환한다."""
-    # TODO: 구현
-    ...
+    """BGE-M3 다국어 임베딩 모델을 로드하여 반환한다."""
+    return HuggingFaceEmbeddings(
+        model_name="BAAI/bge-m3",
+        model_kwargs={"device": "cpu"},
+        encode_kwargs={"normalize_embeddings": True},
+    )

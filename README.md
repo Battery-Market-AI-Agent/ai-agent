@@ -84,9 +84,9 @@ python app.py
 
 ## Contributors
 
-  | 이름 | 역할 | 담당 |
-  |------|------|------|
-  | 김상현 | T5 Report Agent | 보고서 생성 에이전트, 파이프라인 연결 |
-  | 김은비 | T2/T3 Research Agent | SK on·CATL 웹검색 에이전트 (Tavily) |
-  | 나현서 | T1 Market Agent | 시장 환경 조사 에이전트 (RAG/FAISS) |
-  | 임유경 | T4 Compare Agent | Comparative SWOT 분석 에이전트 |
+| 이름 | 역할 | 담당 |
+|------|------|------|
+| 김상현 | T5 Report Agent | 보고서 생성 에이전트, 파이프라인 연결 |
+| 김은비 | T2/T3 Research Agent | SK on·CATL 웹검색 에이전트 (Tavily) |
+| 나현서 | T1 Market Agent | 시장 환경 조사 에이전트 (RAG/FAISS) |
+| 임유경 | T4 Compare Agent | Comparative SWOT 분석 에이전트 |

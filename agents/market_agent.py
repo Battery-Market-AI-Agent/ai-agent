@@ -105,7 +105,7 @@ class MarketAgent(BaseAgent):
     ):
         super().__init__(llm, tools)
         self.vectorstore = vectorstore
-        self._rag_graph = _build_rag_graph(llm, vectorstore)
+        self._rag_graph = _build_rag_graph(self.llm, vectorstore)
 
     def run(self, state: ReportState) -> ReportState:
         raw = []

@@ -65,20 +65,24 @@ def build_test_state(skip_compare: bool, llm=None) -> ReportState:
     return state
 
 
-def run_report(state: ReportState, llm) -> ReportState:
+def run_report(state: ReportState, llm, output_dir: str) -> ReportState:
     """ReportAgent(T5) 실행."""
     print("[INFO] ReportAgent(T5) 실행 중...")
-    report = ReportAgent(llm=llm)
+    report = ReportAgent(llm=llm, output_dir=output_dir)
     state = report.run(state)
     print("[INFO] ReportAgent 완료")
+    chart_paths = state.get("chart_paths", [])
+    if chart_paths:
+        print(f"[INFO] 차트 {len(chart_paths)}개 생성 완료")
+        for p in chart_paths:
+            print(f"       → {p}")
     return state
 
 
-def save_report(report_text: str) -> tuple[str, str]:
+def save_report(report_text: str, output_dir: str) -> tuple[str, str]:
     """outputs/ 디렉토리에 보고서를 MD + PDF로 저장."""
     from tools.pdf_exporter import markdown_to_pdf
 
-    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "outputs")
     os.makedirs(output_dir, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -88,9 +92,9 @@ def save_report(report_text: str) -> tuple[str, str]:
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(report_text)
 
-    # PDF 저장
+    # PDF 저장 (base_dir=output_dir로 차트 이미지 경로 해석)
     pdf_path = os.path.join(output_dir, f"report_{timestamp}.pdf")
-    markdown_to_pdf(report_text, pdf_path)
+    markdown_to_pdf(report_text, pdf_path, base_dir=output_dir)
 
     return md_path, pdf_path
 
@@ -128,15 +132,17 @@ def main():
 
     llm = ChatOpenAI(model="gpt-4o", temperature=0.3)
 
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "outputs")
+
     state = build_test_state(skip_compare=args.skip_compare, llm=llm)
-    state = run_report(state, llm=llm)
+    state = run_report(state, llm=llm, output_dir=output_dir)
 
     report = state.get("final_report", "")
     if not report:
         print("[ERROR] final_report가 비어 있습니다.")
         sys.exit(1)
 
-    md_path, pdf_path = save_report(report)
+    md_path, pdf_path = save_report(report, output_dir)
     print(f"\n[INFO] 마크다운 저장: {md_path}")
     print(f"[INFO] PDF 저장: {pdf_path}")
 

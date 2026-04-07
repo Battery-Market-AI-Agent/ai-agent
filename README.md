@@ -10,7 +10,7 @@ SK on vs CATL 포트폴리오 다각화 전략 비교 분석 보고서를 Multi-
 
 ## Features
 
-- PDF 자료 기반 정보 추출 (IR/ESG 보고서 등 RAG 활용)
+- PDF 자료 기반 정보 추출 (RAG 활용)
 - 웹 검색 기반 실시간 기업 동향 수집 (SK on, CATL 병렬 조사)
 - Comparative SWOT 분석 및 전략적 인사이트 자동 생성
 - 확증 편향 방지 전략 : 문서 관련성 평가(grade) + 쿼리 재작성(rewrite) 루프로 편향된 검색 결과 필터링
@@ -22,10 +22,10 @@ SK on vs CATL 포트폴리오 다각화 전략 비교 분석 보고서를 Multi-
 |------------|------------------------------------------|
 | Framework  | LangGraph, LangChain, Python             |
 | LLM        | GPT-4o via OpenAI API                    |
-| Retrieval  | FAISS (RAG, 문서 관련성 평가 포함)        |
-| Embedding  | BGE-M3 (FlagEmbedding)                   |
+| Retrieval  | FAISS (RAG, 문서 관련성 평가 포함)            |
+| Embedding  | BGE-base-en-v1.5(FlagEmbedding)          |
 | WebSearch  | Tavily Search API                        |
-| Output     | WeasyPrint (PDF), Matplotlib (차트)      |
+| Output     | WeasyPrint (PDF), Matplotlib (차트)       |
 
 ## Agents
 
@@ -37,16 +37,8 @@ SK on vs CATL 포트폴리오 다각화 전략 비교 분석 보고서를 Multi-
 
 ## Architecture
 
-```
-[Market Agent(T1)] ─── RAG(FAISS)
-        ↓
-[SKO Agent(T2)]  ──┐ ── WebSearch     (병렬)
-[CATL Agent(T3)] ──┘ ── WebSearch
-        ↓
-[Compare Agent(T4)] ── LLM 추론
-        ↓
-[Report Agent(T5)] ── LLM 생성 → Markdown / PDF / 차트
-```
+<img width="1282" height="1168" alt="image" src="https://github.com/user-attachments/assets/8d3025e4-f85e-4f92-b116-217869b2aa7b" />
+
 
 ## Directory Structure
 

@@ -1,6 +1,11 @@
 """T1 Market Agent 프롬프트 및 RAG 쿼리 정의"""
 from typing import Dict, List
 
+# PDF 파일명(stem) → 출처 URL 매핑
+SOURCE_URL_MAP: Dict[str, str] = {
+    "GlobalEVOutlook2025": "https://www.iea.org/reports/global-ev-outlook-2025",
+}
+
 MARKET_RAG_QUERIES: List[Dict[str, str]] = [
     {
         "query": "글로벌 배터리 시장 규모 성장률 전망 2024 2025 2026",
@@ -15,7 +20,7 @@ MARKET_RAG_QUERIES: List[Dict[str, str]] = [
         "category": "HEV 피벗 트렌드",
     },
     {
-        "query": "ESS 에너지저장장치 시장 성장 전망 설치량",
+        "query": "battery storage BESS stationary energy storage market growth 2024 2025",
         "category": "ESS 시장 성장",
     },
 ]

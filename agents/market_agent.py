@@ -9,7 +9,7 @@ from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
 from agents.base import BaseAgent
-from rag.market_prompt import MARKET_RAG_QUERIES, SUMMARY_SYSTEM_PROMPT
+from rag.market_prompt import MARKET_RAG_QUERIES, SOURCE_URL_MAP, SUMMARY_SYSTEM_PROMPT
 from rag.rag_tool import grade_documents, rag_retrieve, rewrite_query
 from state import ReportState, ResearchResult
 
@@ -55,13 +55,14 @@ def _build_rag_graph(llm: BaseChatModel, vectorstore: FAISS):
             docs = state["documents"]
             content = "\n\n".join(d.page_content for d in docs)
             first_meta = docs[0].metadata if docs else {}
+            source = first_meta.get("source", "")
             result = {
                 "category": state["category"],
                 "sentiment": "",
-                "title": f"{first_meta.get('source', '')} p.{first_meta.get('page', '')}",
+                "title": f"{source} p.{first_meta.get('page', '')}",
                 "content": content,
-                "source": first_meta.get("source", ""),
-                "url": "",
+                "source": source,
+                "url": SOURCE_URL_MAP.get(source, ""),
                 "date": first_meta.get("date", ""),
             }
         return {"result": result}

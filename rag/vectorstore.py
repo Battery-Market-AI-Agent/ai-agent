@@ -15,13 +15,21 @@ def create_vectorstore(
     documents: List[Document], embeddings: Embeddings
 ) -> FAISS:
     """문서 리스트와 임베딩 모델로 FAISS 인덱스를 생성한다."""
-    # TODO: 구현
-    ...
+    return FAISS.from_documents(documents, embeddings)
+
+
+def save_vectorstore(vectorstore: FAISS, path: str) -> None:
+    """FAISS 인덱스를 로컬 경로에 저장한다."""
+    vectorstore.save_local(path)
+
+
+def load_vectorstore(path: str, embeddings: Embeddings) -> FAISS:
+    """로컬 경로에서 FAISS 인덱스를 로드한다."""
+    return FAISS.load_local(path, embeddings, allow_dangerous_deserialization=True)
 
 
 def search_vectorstore(
     vectorstore: FAISS, query: str, top_k: int = 5
 ) -> List[Dict]:
     """FAISS 인덱스에서 쿼리로 유사도 검색하여 top-k 문서를 반환한다."""
-    # TODO: 구현
-    ...
+    return vectorstore.similarity_search(query, k=top_k)

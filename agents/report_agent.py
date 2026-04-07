@@ -9,7 +9,7 @@ from langchain_core.tools import BaseTool
 
 from agents.base import BaseAgent
 from prompts.report_prompt import (
-    CHART_DATA_EXTRACTION_PROMPT,
+    CHART_SELECTION_PROMPT,
     REFERENCE_FORMAT_PROMPT,
     REPORT_SECTION_PROMPT,
     REPORT_SUMMARY_PROMPT,
@@ -21,8 +21,6 @@ from state import ReportState
 class ReportAgent(BaseAgent):
     """T5: 최종 보고서 생성 — state 전체를 기반으로 보고서 작성."""
 
-    MAX_TOKENS = 200_000
-
     def __init__(
         self,
         llm: BaseChatModel,
@@ -30,7 +28,6 @@ class ReportAgent(BaseAgent):
         output_dir: str = "outputs",
     ):
         super().__init__(llm, tools)
-        self._token_usage = 0
         self._ref_map: Dict[str, int] = {}
         self._ref_list: List[Dict] = []
         self._output_dir = output_dir
@@ -99,23 +96,24 @@ class ReportAgent(BaseAgent):
         )
         sections.append(s5)
 
-        # --- 섹션 6: REFERENCE ---
-        references = self._format_references()
-        sections.append(references)
-
-        # --- 차트 생성 (본문 완성 후) ---
+        # --- 차트 생성 (본문 완성 후, LLM이 선택) ---
         full_body = "\n\n".join(sections)
-        chart_paths = self._generate_charts(full_body)
+        chart_results = self._generate_charts(full_body)
 
         # --- 차트를 본문에 삽입 ---
-        if chart_paths:
-            full_body = self._insert_charts(full_body, chart_paths)
+        if chart_results:
+            full_body = self._insert_charts(full_body, chart_results)
 
         # --- 섹션 1: SUMMARY (마지막 생성) ---
         summary_section = self._generate_summary(full_body)
 
-        final_report = f"{summary_section}\n\n{full_body}"
+        # --- 섹션 6: REFERENCE (본문에서 인용된 것만) ---
+        body_with_summary = f"{summary_section}\n\n{full_body}"
+        references = self._format_references(body_with_summary)
 
+        final_report = f"{body_with_summary}\n\n{references}"
+
+        chart_paths = [c["path"] for c in chart_results]
         return {**state, "final_report": final_report, "chart_paths": chart_paths}
 
     # ----------------------------------------------------------------
@@ -189,10 +187,6 @@ class ReportAgent(BaseAgent):
         categories: Optional[List[str]] = None,
         context: str = "",
     ) -> str:
-        estimated_input = len(summary) + len(raw_data) + len(context)
-        if self._token_usage + estimated_input > self.MAX_TOKENS:
-            return f"### {section_number} {section_title}\n\n[분석 미완료 — 토큰 한도 초과]"
-
         context_block = f"\n추가 참고 자료:\n{context}" if context else ""
 
         messages = [
@@ -206,89 +200,117 @@ class ReportAgent(BaseAgent):
                 instructions=instructions,
             )),
         ]
-        response = self.llm.invoke(messages)
-        content = self._clean_response(response.content)
-        self._token_usage += len(content)
-        return content
+        try:
+            response = self.llm.invoke(messages)
+            return self._clean_response(response.content)
+        except Exception as e:
+            print(f"[WARN] 섹션 {section_number} 생성 실패: {e}")
+            return f"### {section_number} {section_title}\n\n[분석 미완료]"
 
     def _generate_summary(self, full_body: str) -> str:
-        if self._token_usage + len(full_body) > self.MAX_TOKENS:
-            return "## 1. SUMMARY\n\n[분석 미완료 — 토큰 한도 초과]"
-
         messages = [
             SystemMessage(content=REPORT_SYSTEM_PROMPT),
             HumanMessage(content=REPORT_SUMMARY_PROMPT.format(full_body=full_body)),
         ]
-        response = self.llm.invoke(messages)
-        return self._clean_response(response.content)
+        try:
+            response = self.llm.invoke(messages)
+            return self._clean_response(response.content)
+        except Exception as e:
+            print(f"[WARN] SUMMARY 생성 실패: {e}")
+            return "## 1. SUMMARY\n\n[분석 미완료]"
 
     # ----------------------------------------------------------------
     # 차트 생성
     # ----------------------------------------------------------------
 
-    def _extract_chart_data(self, report_body: str) -> Dict:
-        """LLM으로 완성된 본문에서 차트용 수치를 추출."""
+    def _select_and_extract_charts(self, report_body: str) -> List[Dict]:
+        """LLM이 보고서를 읽고 차트 라이브러리에서 효과적인 차트를 선택 + 데이터 추출."""
         messages = [
-            SystemMessage(content="보고서 본문에서 수치를 정확히 추출합니다. 본문에 없는 수치는 null로 표기합니다."),
-            HumanMessage(content=CHART_DATA_EXTRACTION_PROMPT.format(report_body=report_body)),
+            SystemMessage(content="당신은 데이터 시각화 전문가입니다. 보고서 본문에 명시된 수치만 사용하세요."),
+            HumanMessage(content=CHART_SELECTION_PROMPT.format(report_body=report_body)),
         ]
         response = self.llm.invoke(messages)
         text = self._clean_response(response.content)
 
-        # JSON 블록만 추출 (앞뒤 텍스트 제거)
-        start = text.find("{")
-        end = text.rfind("}") + 1
+        start = text.find("[")
+        end = text.rfind("]") + 1
         if start == -1 or end == 0:
-            print("[WARN] 차트 데이터 추출 실패: JSON 블록을 찾을 수 없음")
-            print(f"[DEBUG] LLM 응답:\n{text[:500]}")
-            return {}
+            print("[WARN] 차트 선택 실패: JSON 배열을 찾을 수 없음")
+            return []
 
-        json_str = text[start:end]
         try:
-            data = json.loads(json_str)
-            print(f"[INFO] 차트 데이터 추출 성공: {list(data.keys())}")
-            return data
+            specs = json.loads(text[start:end])
+            if not isinstance(specs, list):
+                return []
+            print(f"[INFO] LLM이 차트 {len(specs)}개 선택: {[s.get('chart_type') for s in specs]}")
+            for s in specs:
+                print(f"       → {s.get('chart_type')} (섹션 {s.get('section')}): {s.get('reason', '')}")
+            return specs
         except json.JSONDecodeError as e:
-            print(f"[WARN] 차트 데이터 JSON 파싱 실패: {e}")
-            print(f"[DEBUG] JSON 문자열:\n{json_str[:500]}")
-            return {}
+            print(f"[WARN] 차트 선택 JSON 파싱 실패: {e}")
+            return []
 
-    def _generate_charts(self, report_body: str) -> List[str]:
-        """본문에서 수치를 추출하고 차트 이미지를 생성."""
-        from tools.chart_generator import create_all_charts
+    def _generate_charts(self, report_body: str) -> List[Dict[str, str]]:
+        """LLM 선택 → 차트 이미지 생성. 반환: [{"path", "section", "title"}, ...]"""
+        from tools.chart_generator import create_charts
 
-        chart_data = self._extract_chart_data(report_body)
-        if not chart_data:
-            print("[WARN] 차트 데이터가 비어 있어 차트를 생성하지 않음")
+        chart_specs = self._select_and_extract_charts(report_body)
+        if not chart_specs:
+            print("[INFO] 채택 기준에 맞는 차트가 없어 차트를 생성하지 않음")
             return []
 
         chart_dir = os.path.join(self._output_dir, "charts")
-        paths = create_all_charts(chart_data, chart_dir)
-        print(f"[INFO] 차트 이미지 {len(paths)}개 생성 완료")
-        return paths
+        return create_charts(chart_specs, chart_dir)
 
-    def _insert_charts(self, full_body: str, chart_paths: List[str]) -> str:
-        """생성된 차트를 본문의 적절한 위치에 절대경로 이미지로 삽입."""
-        chart_map = {}
-        for path in chart_paths:
-            abs_path = os.path.abspath(path)
-            basename = os.path.basename(path)
-            if "market_trend" in basename:
-                chart_map["market_trend"] = abs_path
-            elif "company_comparison" in basename:
-                chart_map["company_comparison"] = abs_path
+    def _insert_charts(self, full_body: str, chart_results: List[Dict[str, str]]) -> str:
+        """생성된 차트를 해당 소제목 내용 뒤에 삽입.
+        소제목은 #### 헤더 또는 **볼드** 형태 모두 지원."""
+        import re
 
-        # 섹션 2 끝에 시장 트렌드 차트 삽입
-        if "market_trend" in chart_map:
-            marker = "## 3. 기업별 전략 분석"
-            chart_md = f"\n\n![EV vs ESS 성장률 추이]({chart_map['market_trend']})\n\n"
-            full_body = full_body.replace(marker, chart_md + marker)
+        def find_section_markers(text):
+            """본문의 모든 구분점(헤더 + 볼드 소제목)의 (위치, 텍스트) 리스트."""
+            markers = []
+            # ## / ### / #### 헤더
+            for m in re.finditer(r"^#{2,4}\s+.+", text, re.MULTILINE):
+                markers.append((m.start(), m.group()))
+            # **볼드 소제목** (줄 시작에 위치)
+            for m in re.finditer(r"^\*\*(.+?)\*\*", text, re.MULTILINE):
+                markers.append((m.start(), m.group(1)))
+            markers.sort(key=lambda x: x[0])
+            return markers
 
-        # 섹션 4.1 끝(4.2 앞)에 기업 비교 차트 삽입
-        if "company_comparison" in chart_map:
-            marker = "### 4.2 Comparative SWOT"
-            chart_md = f"\n\n![SK on vs CATL 핵심 지표 비교]({chart_map['company_comparison']})\n\n"
-            full_body = full_body.replace(marker, chart_md + marker)
+        # 뒤에서부터 삽입 (위치 밀림 방지)
+        for chart in reversed(chart_results):
+            section_name = chart.get("section", "")
+            abs_path = chart.get("path", "")
+            try:
+                path = os.path.relpath(abs_path, self._output_dir)
+            except ValueError:
+                path = abs_path
+            title = chart.get("title", "차트")
+
+            markers = find_section_markers(full_body)
+
+            # 소제목명으로 매칭 (부분 매칭)
+            target_idx = None
+            for i, (pos, marker_text) in enumerate(markers):
+                if section_name in marker_text:
+                    target_idx = i
+                    break
+
+            if target_idx is None:
+                print(f"[WARN] 차트 삽입 실패: '{section_name}' 소제목을 찾을 수 없음")
+                continue
+
+            # 다음 마커 직전, 없으면 본문 끝
+            if target_idx + 1 < len(markers):
+                insert_pos = markers[target_idx + 1][0]
+            else:
+                insert_pos = len(full_body)
+
+            chart_md = f"\n\n![{title}]({path})\n\n"
+            full_body = full_body[:insert_pos] + chart_md + full_body[insert_pos:]
+            print(f"[INFO] 차트 삽입: '{title}' → '{section_name}' 뒤")
 
         return full_body
 
@@ -296,9 +318,15 @@ class ReportAgent(BaseAgent):
     # REFERENCE
     # ----------------------------------------------------------------
 
-    def _format_references(self) -> str:
+    def _format_references(self, report_body: str) -> str:
+        """본문에서 실제로 [n]으로 인용된 레퍼런스만 REFERENCE에 포함."""
+        import re
+        cited_nums = set(int(n) for n in re.findall(r"\[(\d+)\]", report_body))
+
         lines = []
         for ref in self._ref_list:
+            if ref["num"] not in cited_nums:
+                continue
             line = REFERENCE_FORMAT_PROMPT.format(
                 source=ref["source"],
                 date=ref["date"],
@@ -306,7 +334,7 @@ class ReportAgent(BaseAgent):
                 url=ref["url"],
             )
             lines.append(f"[{ref['num']}] {line}")
-        return "## 6. REFERENCE\n\n" + "\n".join(lines)
+        return "## 6. REFERENCE\n\n" + "\n\n".join(lines)
 
     # ----------------------------------------------------------------
     # 유틸리티

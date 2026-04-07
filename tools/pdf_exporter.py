@@ -33,6 +33,7 @@ th, td {
     vertical-align: top;
 }
 th { background-color: #f0f0f0; font-weight: bold; }
+td:first-child, th:first-child { white-space: nowrap; min-width: 5em; }
 p { margin: 8px 0; }
 .references p {
     font-size: 8.5pt;
@@ -43,7 +44,7 @@ p { margin: 8px 0; }
 }
 img {
     display: block;
-    max-width: 100%;
+    max-width: 50%;
     margin: 16px auto;
 }
 """

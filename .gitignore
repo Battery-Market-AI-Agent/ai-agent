@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# 가상환경
+venv/
+.venv/
+
+# 환경 변수
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# FAISS 인덱스 (용량 큼, 로컬 빌드)
+*.faiss
+*.pkl
+
+# 출력 보고서
+outputs/

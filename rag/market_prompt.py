@@ -8,15 +8,15 @@ SOURCE_URL_MAP: Dict[str, str] = {
 
 MARKET_RAG_QUERIES: List[Dict[str, str]] = [
     {
-        "query": "글로벌 배터리 시장 규모 성장률 전망 2024 2025 2026",
+        "query": "global battery market size growth forecast 2024 2025 2026",
         "category": "글로벌 배터리 시장 현황",
     },
     {
-        "query": "전기차 수요 둔화 캐즘 원인 판매 감소 2024 2025",
+        "query": "electric vehicle EV demand slowdown sales decline chasm 2024 2025",
         "category": "전기차 캐즘",
     },
     {
-        "query": "하이브리드 HEV 배터리 수요 전환 트렌드 성장",
+        "query": "hybrid HEV battery demand shift trend growth 2024 2025",
         "category": "HEV 전환 트렌드",
     },
     {

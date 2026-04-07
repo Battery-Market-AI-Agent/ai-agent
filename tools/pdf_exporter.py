@@ -14,7 +14,8 @@ body {
     color: #1a1a1a;
 }
 h1 { font-size: 20pt; margin-top: 0; border-bottom: 2px solid #1a1a1a; padding-bottom: 8px; }
-h2 { font-size: 16pt; margin-top: 28px; border-bottom: 1px solid #cccccc; padding-bottom: 4px; }
+h2 { font-size: 16pt; margin-top: 28px; border-bottom: 1px solid #cccccc; padding-bottom: 4px; page-break-before: always; }
+h2:first-of-type { page-break-before: avoid; }
 h3 { font-size: 13pt; margin-top: 20px; }
 table {
     width: 100%;

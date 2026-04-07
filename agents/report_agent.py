@@ -23,8 +23,13 @@ class ReportAgent(BaseAgent):
     def __init__(self, llm: BaseChatModel, tools: List[BaseTool] | None = None):
         super().__init__(llm, tools)
         self._token_usage = 0
+        self._ref_map: Dict[str, int] = {}   # url → 번호
+        self._ref_list: List[Dict] = []       # 번호순 레퍼런스 목록
 
     def run(self, state: ReportState) -> ReportState:
+        # 글로벌 레퍼런스 번호 매핑 (모든 섹션보다 먼저)
+        self._build_ref_map(state)
+
         sections: List[str] = []
 
         # --- 섹션 2: 시장 배경 ---
@@ -86,8 +91,8 @@ class ReportAgent(BaseAgent):
         )
         sections.append(s5)
 
-        # --- 섹션 6: REFERENCE (프로그래밍 추출) ---
-        references = self._extract_references(state)
+        # --- 섹션 6: REFERENCE ---
+        references = self._format_references()
         sections.append(references)
 
         # --- 섹션 1: SUMMARY (마지막 생성, 첫 번째 배치) ---
@@ -99,24 +104,52 @@ class ReportAgent(BaseAgent):
         return {**state, "final_report": final_report}
 
     # ----------------------------------------------------------------
-    # 헬퍼 메서드
+    # 레퍼런스 매핑
+    # ----------------------------------------------------------------
+
+    def _build_ref_map(self, state: ReportState) -> None:
+        """전체 raw 데이터에서 URL 기준으로 글로벌 레퍼런스 번호를 매긴다."""
+        self._ref_map = {}
+        self._ref_list = []
+        counter = 1
+
+        for key in ["market", "sko", "catl"]:
+            result = state.get(key, {})
+            for item in result.get("raw", []):
+                url = item.get("url", "")
+                if url and url not in self._ref_map:
+                    self._ref_map[url] = counter
+                    self._ref_list.append({
+                        "num": counter,
+                        "source": item.get("source", ""),
+                        "date": item.get("date", ""),
+                        "title": item.get("title", ""),
+                        "url": url,
+                    })
+                    counter += 1
+
+    def _get_ref_num(self, url: str) -> int:
+        """URL에 해당하는 레퍼런스 번호를 반환."""
+        return self._ref_map.get(url, 0)
+
+    # ----------------------------------------------------------------
+    # 데이터 포맷팅
     # ----------------------------------------------------------------
 
     def _format_section_data(
         self, state: ReportState, keys: List[str], categories: Optional[List[str]] = None
     ) -> tuple[str, str]:
-        """state에서 summary와 raw를 각각 텍스트로 포맷하여 반환."""
+        """state에서 summary와 raw를 각각 텍스트로 포맷하여 반환.
+        raw 항목 앞에 [번호]를 붙여 LLM이 인용 번호를 알 수 있게 한다."""
         summaries: List[str] = []
         raw_lines: List[str] = []
 
         for key in keys:
             result = state.get(key, {})
 
-            # summary
             if result.get("summary"):
                 summaries.append(result["summary"])
 
-            # raw
             for item in result.get("raw", []):
                 cat = item.get("category", "")
                 if categories and cat not in categories:
@@ -124,15 +157,19 @@ class ReportAgent(BaseAgent):
                 sentiment = item.get("sentiment", "")
                 title = item.get("title", "")
                 content = item.get("content", "")
-                source = item.get("source", "")
-                date = item.get("date", "")
+                url = item.get("url", "")
+                ref_num = self._get_ref_num(url)
                 raw_lines.append(
-                    f"[{cat} / {sentiment}] {title}\n{content}\n— {source}({date})"
+                    f"[{ref_num}] [{cat} / {sentiment}] {title}\n{content}"
                 )
 
         summary_text = "\n".join(summaries) if summaries else "[요약 데이터 없음]"
         raw_text = "\n\n".join(raw_lines) if raw_lines else "[상세 데이터 없음]"
         return summary_text, raw_text
+
+    # ----------------------------------------------------------------
+    # LLM 호출
+    # ----------------------------------------------------------------
 
     def _generate_section(
         self,
@@ -145,12 +182,6 @@ class ReportAgent(BaseAgent):
         context: str = "",
     ) -> str:
         """섹션 하나를 LLM으로 생성."""
-        # categories 필터가 있으면 raw_data에서 이미 필터링된 상태로 들어옴
-        # 별도로 _format_section_data를 다시 부를 경우를 위한 오버로드
-        if categories and raw_data:
-            # 이미 포맷된 raw_data를 그대로 사용
-            pass
-
         estimated_input = len(summary) + len(raw_data) + len(context)
         if self._token_usage + estimated_input > self.MAX_TOKENS:
             return f"### {section_number} {section_title}\n\n[분석 미완료 — 토큰 한도 초과]"
@@ -185,30 +216,26 @@ class ReportAgent(BaseAgent):
         response = self.llm.invoke(messages)
         return self._clean_response(response.content)
 
-    def _extract_references(self, state: ReportState) -> str:
-        """전체 raw 데이터에서 출처를 프로그래밍 방식으로 추출."""
-        seen_urls: set = set()
-        refs: List[Dict] = []
+    # ----------------------------------------------------------------
+    # REFERENCE
+    # ----------------------------------------------------------------
 
-        for key in ["market", "sko", "catl"]:
-            result = state.get(key, {})
-            for item in result.get("raw", []):
-                url = item.get("url", "")
-                if url and url not in seen_urls:
-                    seen_urls.add(url)
-                    refs.append({
-                        "source": item.get("source", ""),
-                        "date": item.get("date", ""),
-                        "title": item.get("title", ""),
-                        "url": url,
-                    })
+    def _format_references(self) -> str:
+        """글로벌 레퍼런스 번호 순서대로 REFERENCE 섹션을 생성."""
+        lines = []
+        for ref in self._ref_list:
+            line = REFERENCE_FORMAT_PROMPT.format(
+                source=ref["source"],
+                date=ref["date"],
+                title=ref["title"],
+                url=ref["url"],
+            )
+            lines.append(f"[{ref['num']}] {line}")
+        return "## 6. REFERENCE\n\n" + "\n".join(lines)
 
-        # 날짜 내림차순 정렬
-        refs.sort(key=lambda r: r["date"], reverse=True)
-
-        lines = [REFERENCE_FORMAT_PROMPT.format(**r) for r in refs]
-        numbered = [f"{i}. {line}" for i, line in enumerate(lines, 1)]
-        return f"## 6. REFERENCE\n\n" + "\n".join(numbered)
+    # ----------------------------------------------------------------
+    # 유틸리티
+    # ----------------------------------------------------------------
 
     def _clean_response(self, content: str) -> str:
         """LLM 응답에서 마크다운 코드 펜스를 제거."""

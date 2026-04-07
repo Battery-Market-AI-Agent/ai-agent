@@ -123,11 +123,10 @@ class MarketAgent(BaseAgent):
         return {**state, "market": market}
 
     def _generate_summary(self, raw: list) -> str:
-        valid = [r for r in raw if r.get("content") != "검색 데이터 불충분"]
-        if not valid:
+        if not raw:
             return "데이터 불충분 — 시장 배경 섹션 작성 불가"
         content = "\n\n".join(
-            f"[{r['category']}]\n{r['content']}" for r in valid
+            f"[{r['category']}]\n{r['content']}" for r in raw
         )
         messages = [
             SystemMessage(content=SUMMARY_SYSTEM_PROMPT),

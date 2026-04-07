@@ -43,14 +43,40 @@ SK on vs CATL 포트폴리오 다각화 전략 비교 분석 보고서를 Multi-
 ## Directory Structure
 
 ```
-├── agents/                # Agent 모듈 (Market, SKO, CATL, Compare, Report)
-├── prompts/               # 프롬프트 템플릿
-├── tools/                 # RAG 도구, WebSearch 도구, 차트/PDF 생성
-├── rag/                   # PDF 로더, 임베딩, FAISS 벡터스토어
-├── data/                  # RAG용 PDF 문서 (IR/ESG 보고서)
-├── outputs/               # 생성된 보고서 저장
-├── app.py                 # 실행 스크립트
-└── README.md
+├── agents/                    # Agent 모듈
+│   ├── base.py                #   BaseAgent + SanitizedLLM 래퍼
+│   ├── market_agent.py        #   T1: 시장 환경 조사 (RAG)
+│   ├── sko_agent.py           #   T2: SK on 조사 (WebSearch)
+│   ├── catl_agent.py          #   T3: CATL 조사 (WebSearch)
+│   ├── web_research_agent.py  #   T2/T3 공통 베이스
+│   ├── compare_agent.py       #   T4: Comparative SWOT 분석
+│   └── report_agent.py        #   T5: 보고서 생성 + 차트
+├── prompts/                   # 프롬프트 템플릿
+│   ├── market_prompt.py       #   T1 RAG 쿼리 + Grader
+│   ├── research_prompt.py     #   T2/T3 웹검색 쿼리 생성
+│   ├── compare_prompt.py      #   T4 SWOT 분석
+│   └── report_prompt.py       #   T5 보고서 + 차트 선택
+├── tools/                     # 도구 모듈
+│   ├── rag_tool.py            #   RAG 검색 + 관련성 평가
+│   ├── web_search_tool.py     #   Tavily 웹검색
+│   ├── chart_generator.py     #   matplotlib 차트 라이브러리
+│   └── pdf_exporter.py        #   마크다운 → PDF 변환
+├── rag/                       # RAG 파이프라인
+│   ├── data/                  #   PDF 문서 (IR/ESG 보고서)
+│   ├── faiss_index/           #   빌드된 FAISS 인덱스
+│   ├── build_index.py         #   인덱스 빌드 스크립트
+│   ├── loader.py              #   PDF 로드 + 청킹
+│   ├── embedder.py            #   BGE-M3 임베딩
+│   └── vectorstore.py         #   FAISS 생성/검색/저장
+├── tests/                     # 테스트 스크립트
+├── data/                      # 더미 데이터 (T4/T5 테스트용)
+├── docs/                      # 문서
+├── scripts/                   # 유틸리티 스크립트
+├── outputs/                   # 생성된 보고서 (MD/PDF/차트)
+├── state.py                   # 공유 State 정의
+├── graph.py                   # LangGraph 그래프 정의
+├── app.py                     # 실행 진입점
+└── requirements.txt
 ```
 
 ## Getting Started

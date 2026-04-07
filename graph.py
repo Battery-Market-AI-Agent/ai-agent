@@ -1,14 +1,12 @@
 """
 LangGraph 그래프 정의
 
-노드: MarketAgent, SKOAgent, CATLAgent, CompareAgent, ReportAgent
-엣지:
-  START → MarketAgent
-  MarketAgent → [SKOAgent, CATLAgent]  (fan-out, 병렬)
-  [SKOAgent, CATLAgent] → CompareAgent (fan-in)
-  CompareAgent → ReportAgent
-  ReportAgent → END
+START → [T1, T2, T3]  (fan-out, 전부 병렬)
+         T2, T3 → T4  (fan-in, Compare는 sko+catl만)
+         T1, T4 → T5  (fan-in, Report는 전체 사용)
+         T5 → END
 """
+import time
 from typing import List
 
 from langchain_community.vectorstores import FAISS
@@ -22,16 +20,25 @@ from agents.catl_agent import CATLAgent
 from agents.compare_agent import CompareAgent
 from agents.report_agent import ReportAgent
 
+AGENT_LABELS = {
+    "market": "T1 시장조사(RAG)",
+    "sko": "T2 SK on(WebSearch)",
+    "catl": "T3 CATL(WebSearch)",
+    "compare": "T4 비교분석(SWOT)",
+    "report": "T5 보고서생성",
+}
 
-def _make_node(agent_run, output_keys: List[str]):
-    """Agent.run()을 래핑하여 변경된 키만 반환하는 노드 함수를 만든다.
 
-    병렬 실행 시 각 노드가 전체 state를 반환하면
-    LangGraph의 LastValue 채널에서 충돌이 발생한다.
-    이를 방지하기 위해 각 노드가 자기 담당 키만 반환하도록 필터링한다.
-    """
+def _make_node(name: str, agent_run, output_keys: List[str]):
+    """Agent.run()을 래핑하여 로깅 + 변경된 키만 반환하는 노드 함수를 만든다."""
+    label = AGENT_LABELS.get(name, name)
+
     def node_fn(state: ReportState) -> dict:
+        print(f"  [{label}] 시작...")
+        start = time.time()
         result = agent_run(state)
+        elapsed = time.time() - start
+        print(f"  [{label}] 완료 ({elapsed:.1f}초)")
         return {k: result[k] for k in output_keys if k in result}
     return node_fn
 
@@ -53,26 +60,28 @@ def build_graph(
     # 2. StateGraph 생성
     graph = StateGraph(ReportState)
 
-    # 3. 노드 추가 (각 Agent가 담당하는 state 키만 반환)
-    graph.add_node("market", _make_node(market_agent.run, ["market"]))
-    graph.add_node("sko", _make_node(sko_agent.run, ["sko"]))
-    graph.add_node("catl", _make_node(catl_agent.run, ["catl"]))
-    graph.add_node("compare", _make_node(compare_agent.run, ["comparative_swot"]))
-    graph.add_node("report", _make_node(report_agent.run, ["final_report", "chart_paths"]))
+    # 3. 노드 추가 (로깅 + 담당 키만 반환)
+    graph.add_node("market", _make_node("market", market_agent.run, ["market"]))
+    graph.add_node("sko", _make_node("sko", sko_agent.run, ["sko"]))
+    graph.add_node("catl", _make_node("catl", catl_agent.run, ["catl"]))
+    graph.add_node("compare", _make_node("compare", compare_agent.run, ["comparative_swot"]))
+    graph.add_node("report", _make_node("report", report_agent.run, ["final_report", "chart_paths"]))
 
     # 4. 엣지 연결
+    # START → T1, T2, T3 (fan-out, 전부 병렬)
     graph.add_edge(START, "market")
+    graph.add_edge(START, "sko")
+    graph.add_edge(START, "catl")
 
-    # MarketAgent → SKOAgent, CATLAgent (fan-out 병렬)
-    graph.add_edge("market", "sko")
-    graph.add_edge("market", "catl")
-
-    # SKOAgent, CATLAgent → CompareAgent (fan-in)
+    # T2, T3 → T4 (fan-in, Compare는 sko+catl만 사용)
     graph.add_edge("sko", "compare")
     graph.add_edge("catl", "compare")
 
-    # CompareAgent → ReportAgent → END
+    # T1, T4 → T5 (fan-in, Report는 market+compare 결과 모두 사용)
+    graph.add_edge("market", "report")
     graph.add_edge("compare", "report")
+
+    # T5 → END
     graph.add_edge("report", END)
 
     # 5. 컴파일

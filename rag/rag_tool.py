@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from rag.market_prompt import GRADER_SYSTEM_PROMPT, QUERY_REWRITE_SYSTEM_PROMPT
 
 
-def rag_retrieve(query: str, vectorstore: FAISS, top_k: int = 5) -> List[Document]:
+def rag_retrieve(query: str, vectorstore: FAISS, top_k: int = 10) -> List[Document]:
     """FAISS에서 유사도 검색하여 top-k 문서를 반환한다."""
     return vectorstore.similarity_search(query, k=top_k)
 

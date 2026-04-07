@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 from langchain_core.documents import Document
-from rag.rag_tool import grade_documents, rag_retrieve, rewrite_query
+from tools.rag_tool import grade_documents, rag_retrieve, rewrite_query
 
 
 def _mock_llm(response_text: str):

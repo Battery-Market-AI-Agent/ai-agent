@@ -2,7 +2,7 @@
 
 ## 프로젝트 개요
 
-- LG에너지솔루션 vs CATL 포트폴리오 다각화 전략 비교 분석 보고서를 Multi-Agent로 자동 생성
+- SK on vs CATL 포트폴리오 다각화 전략 비교 분석 보고서를 Multi-Agent로 자동 생성
 - Distributed 패턴 (각 Agent가 독립 수행, 공유 State로 결과 전달)
 - LangGraph + LangChain + Python
 
@@ -11,7 +11,7 @@
 ```
 [Market Agent(T1)] ─── RAG(FAISS)
         ↓
-[LG Agent(T2)] ──┐ ── WebSearch     (병렬)
+[SKO Agent(T2)] ──┐ ── WebSearch     (병렬)
 [CATL Agent(T3)] ─┘ ── WebSearch
         ↓
 [Compare Agent(T4)] ── LLM 추론
@@ -27,7 +27,7 @@
 │   ├── __init__.py
 │   ├── base.py                # BaseAgent 클래스
 │   ├── market_agent.py        # T1: 시장 환경 조사 (RAG)
-│   ├── lg_agent.py            # T2: LG에너지솔루션 조사 (WebSearch)
+│   ├── sko_agent.py           # T2: SK on 조사 (WebSearch)
 │   ├── catl_agent.py          # T3: CATL 조사 (WebSearch)
 │   ├── compare_agent.py       # T4: Comparative SWOT (LLM 추론)
 │   └── report_agent.py        # T5: 최종 보고서 생성 (LLM 생성)
@@ -81,7 +81,7 @@ class SWOTResult(TypedDict, total=False):
 class ReportState(TypedDict, total=False):
     # Research Layer
     market: ResearchResult
-    lg: ResearchResult
+    sko: ResearchResult
     catl: ResearchResult
     # Analysis Layer
     comparative_swot: SWOTResult
@@ -114,25 +114,25 @@ class ReportState(TypedDict, total=False):
 # 결과를 state["market"]에 ResearchResult 형태로 저장
 ```
 
-### agents/lg_agent.py (T2)
+### agents/sko_agent.py (T2)
 
 ```
 # BaseAgent 상속
 # Tool: WebSearch
 # 확증 편향 방지: 긍정 쿼리 + 부정 쿼리 병렬 검색
-#   - 긍정: "LG에너지솔루션 ESS 성장 전략 포트폴리오 다각화 2025 2026"
-#   - 부정: "LG에너지솔루션 실적 부진 리스크 가동률 하락 약점 2025 2026"
+#   - 긍정: "SK on ESS 성장 전략 포트폴리오 다각화 2025 2026"
+#   - 부정: "SK on 실적 부진 리스크 가동률 하락 약점 2025 2026"
 # 6가지 조사 항목: 사업 포트폴리오, 기술 경쟁력, 재무 현황, 공급망/생산, 시장 지위, 리스크
 # 각 결과를 raw list[dict] 형태로 저장 (category, sentiment, title, content, source, url, date)
 # 검색 실패 시 쿼리 변경 후 1회 재시도
-# 결과를 state["lg"]에 저장
+# 결과를 state["sko"]에 저장
 ```
 
 ### agents/catl_agent.py (T3)
 
 ```
 # BaseAgent 상속
-# lg_agent.py와 동일 구조, 회사명만 CATL로 변경
+# sko_agent.py와 동일 구조, 회사명만 CATL로 변경
 # T2와 병렬 실행됨
 # 결과를 state["catl"]에 저장
 ```
@@ -142,9 +142,9 @@ class ReportState(TypedDict, total=False):
 ```
 # BaseAgent 상속
 # Tool: 없음 (LLM 추론만)
-# 입력: state["lg"]["summary"] + state["catl"]["summary"] (필요시 raw 참조)
+# 입력: state["sko"]["summary"] + state["catl"]["summary"] (필요시 raw 참조)
 # Comparative SWOT 테이블 생성:
-#   | 구분 | LG에너지솔루션 | CATL | 전략적 시사점 |
+#   | 구분 | SK on | CATL | 전략적 시사점 |
 #   | S - 내부 경쟁력 | ... | ... | ... |
 #   | W - 내부 취약점 | ... | ... | ... |
 #   | O - 외부 기회   | ... | ... | ... |
@@ -164,7 +164,7 @@ class ReportState(TypedDict, total=False):
 #      2.1 글로벌 배터리 시장 현황
 #      2.2 전기차 캐즘과 HEV 피벗
 #   3. 기업별 전략 분석
-#      3.1 LG에너지솔루션 포트폴리오 다각화
+#      3.1 SK on 포트폴리오 다각화
 #      3.2 CATL 포트폴리오 다각화
 #   4. 비교 분석
 #      4.1 핵심 전략 비교
@@ -219,11 +219,11 @@ class ReportState(TypedDict, total=False):
 
 ```
 # LangGraph로 그래프 정의
-# 노드: MarketAgent, LGAgent, CATLAgent, CompareAgent, ReportAgent
+# 노드: MarketAgent, SKOAgent, CATLAgent, CompareAgent, ReportAgent
 # 엣지:
 #   START → MarketAgent
-#   MarketAgent → [LGAgent, CATLAgent]  (fan-out, 병렬)
-#   [LGAgent, CATLAgent] → CompareAgent (fan-in)
+#   MarketAgent → [SKOAgent, CATLAgent]  (fan-out, 병렬)
+#   [SKOAgent, CATLAgent] → CompareAgent (fan-in)
 #   CompareAgent → ReportAgent
 #   ReportAgent → END
 ```

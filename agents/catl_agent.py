@@ -2,7 +2,7 @@
 T3: CATL 조사 Agent (WebSearch 기반)
 
 # BaseAgent 상속
-# lg_agent.py와 동일 구조, 회사명만 CATL로 변경
+# sko_agent.py와 동일 구조, 회사명만 CATL로 변경
 # T2와 병렬 실행됨
 # 확증 편향 방지: 긍정 쿼리 + 부정 쿼리 병렬 검색
 # 6가지 조사 항목: 사업 포트폴리오, 기술 경쟁력, 재무 현황, 공급망/생산, 시장 지위, 리스크

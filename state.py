@@ -26,7 +26,7 @@ class SWOTResult(TypedDict, total=False):
 class ReportState(TypedDict, total=False):
     # Research Layer
     market: ResearchResult
-    lg: ResearchResult
+    sko: ResearchResult
     catl: ResearchResult
     # Analysis Layer
     comparative_swot: SWOTResult

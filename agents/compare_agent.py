@@ -1,24 +1,13 @@
-"""
-T4: Comparative SWOT 분석 Agent (LLM 추론)
-
-# BaseAgent 상속
-# Tool: 없음 (LLM 추론만)
-# 입력: state["sko"]["summary"] + state["catl"]["summary"] (필요시 raw 참조)
-# Comparative SWOT 테이블 생성:
-#   | 구분 | SK on | CATL | 전략적 시사점 |
-#   | S - 내부 경쟁력 | ... | ... | ... |
-#   | W - 내부 취약점 | ... | ... | ... |
-#   | O - 외부 기회   | ... | ... | ... |
-#   | T - 외부 리스크 | ... | ... | ... |
-# 결과를 state["comparative_swot"]에 SWOTResult(table, insights)로 저장
-"""
+"""T4: Comparative SWOT 분석 Agent (LLM 추론)"""
 from typing import List
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
 
 from agents.base import BaseAgent
-from state import ReportState
+from prompts.compare_prompt import COMPARE_SYSTEM_PROMPT, INSIGHTS_PROMPT, SWOT_TABLE_PROMPT
+from state import ReportState, SWOTResult
 
 
 class CompareAgent(BaseAgent):
@@ -28,9 +17,55 @@ class CompareAgent(BaseAgent):
         super().__init__(llm, tools)
 
     def run(self, state: ReportState) -> ReportState:
-        # TODO: 구현
-        # 1. state["sko"], state["catl"]에서 summary 및 raw 데이터 수집
-        # 2. LLM에게 Comparative SWOT 테이블 생성 요청
-        # 3. table + insights 파싱
-        # 4. state["comparative_swot"]에 SWOTResult 형태로 저장
-        ...
+        sko_summary = self._get_summary(state, "sko")
+        catl_summary = self._get_summary(state, "catl")
+
+        table = self._generate_swot_table(sko_summary, catl_summary)
+        insights = self._generate_insights(table)
+
+        return {**state, "comparative_swot": SWOTResult(table=table, insights=insights)}
+
+    def _get_summary(self, state: ReportState, key: str) -> str:
+        """state에서 summary를 추출. 없으면 raw 데이터를 텍스트로 변환해 fallback."""
+        result = state.get(key, {})
+        if result.get("summary"):
+            return result["summary"]
+
+        # summary 없으면 raw에서 직접 조합
+        raw = result.get("raw", [])
+        if not raw:
+            return f"[{key.upper()} 데이터 없음]"
+
+        lines = []
+        for item in raw:
+            category = item.get("category", "")
+            sentiment = item.get("sentiment", "")
+            content = item.get("content", "")
+            lines.append(f"[{category} / {sentiment}] {content}")
+        return "\n".join(lines)
+
+    def _generate_swot_table(self, sko_summary: str, catl_summary: str) -> str:
+        """LLM으로 Comparative SWOT 테이블 생성."""
+        messages = [
+            SystemMessage(content=COMPARE_SYSTEM_PROMPT),
+            HumanMessage(content=SWOT_TABLE_PROMPT.format(
+                sko_summary=sko_summary,
+                catl_summary=catl_summary,
+            )),
+        ]
+        response = self.llm.invoke(messages)
+        content = response.content.strip()
+        # LLM이 ```markdown ... ``` 으로 감쌀 경우 코드 펜스 제거
+        if content.startswith("```"):
+            lines = content.splitlines()
+            content = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:]).strip()
+        return content
+
+    def _generate_insights(self, swot_table: str) -> str:
+        """LLM으로 종합 시사점 생성."""
+        messages = [
+            SystemMessage(content=COMPARE_SYSTEM_PROMPT),
+            HumanMessage(content=INSIGHTS_PROMPT.format(swot_table=swot_table)),
+        ]
+        response = self.llm.invoke(messages)
+        return response.content.strip()

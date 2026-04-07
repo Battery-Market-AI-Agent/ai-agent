@@ -25,6 +25,7 @@ Thumbs.db
 # FAISS 인덱스 (용량 큼, 로컬 빌드)
 *.faiss
 *.pkl
+rag/faiss_index/
 
 # 출력 보고서
 outputs/

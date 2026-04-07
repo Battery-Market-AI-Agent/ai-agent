@@ -57,7 +57,7 @@ class WebResearchAgent(BaseAgent):
                         retry += 1
                         if retry <= MAX_RETRIES:
                             current_query = self._refine_query(
-                                category, sentiment, current_query, "검색 결과 없음"
+                                category, sentiment, current_query, "검색 결과 없음", retry
                             )
                         continue
 
@@ -80,9 +80,19 @@ class WebResearchAgent(BaseAgent):
                     retry += 1
                     if retry <= MAX_RETRIES:
                         current_query = self._refine_query(
-                            category, sentiment, current_query, grade["reason"]
+                            category, sentiment, current_query, grade["reason"], retry
                         )
                         print(f"  [{self.company}] {category}/{sentiment} | 쿼리 재작성 → {current_query}")
+                else:
+                    # 최대 재시도 소진 — 데이터 불충분 마커 추가
+                    print(f"  [{self.company}] {category}/{sentiment} | 재시도 소진 → 데이터 불충분 마커")
+                    raw_results.append({
+                        "category": category,
+                        "sentiment": sentiment,
+                        "title": "[데이터 불충분]",
+                        "content": f"{MAX_RETRIES + 1}회 검색 후에도 {category} 관련 충분한 자료를 찾지 못했습니다.",
+                        "url": "", "source": "", "date": "",
+                    })
 
         # Step 4: summary 생성
         summary_response = self.llm.invoke(
@@ -129,10 +139,17 @@ class WebResearchAgent(BaseAgent):
             return {"grade": "insufficient", "reason": "평가 결과 파싱 실패"}
 
     def _refine_query(
-        self, category: str, sentiment: str, original_query: str, reason: str
+        self, category: str, sentiment: str, original_query: str, reason: str, retry: int = 1
     ) -> str:
-        """LLM으로 실패한 쿼리를 재작성."""
+        """LLM으로 실패한 쿼리를 재작성. retry 횟수에 따라 방향을 코드에서 분기."""
         from prompts.research_prompt import QUERY_REFINEMENT_PROMPT
+
+        if retry == 1:
+            direction = "더 구체적인 세부 키워드로 변경 (연도, 수치, 사건명 등 추가)"
+        elif retry == 2:
+            direction = "영어 쿼리로 전환 (English keywords only, 반드시 회사명 포함)"
+        else:
+            direction = f"더 넓은 범위로 확장하되 반드시 {self.company} 포함 (경쟁사 비교, 업계 동향 관점)"
 
         response = self.llm.invoke(
             QUERY_REFINEMENT_PROMPT.format(
@@ -141,6 +158,7 @@ class WebResearchAgent(BaseAgent):
                 sentiment=sentiment,
                 original_query=original_query,
                 reason=reason,
+                refinement_direction=direction,
             )
         )
         return response.content.strip()
